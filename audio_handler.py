@@ -8,6 +8,57 @@ import soundfile as sf
 import pygame
 from config import SAMPLE_RATE, SILENCE_THRESHOLD
 
+# Otomatik bulunan USB mikrofon index'i (None ise varsayilan cihaz kullanilir)
+_USB_MIC_INDEX = None
+
+
+def ses_cihazlarini_listele():
+    """Sistemdeki tum ses giris/cikis cihazlarini konsola bas ve USB mikrofon index'ini bul."""
+    global _USB_MIC_INDEX
+    
+    print("\n" + "=" * 60)
+    print("   SES CİHAZLARI LİSTESİ")
+    print("=" * 60)
+    
+    cihazlar = sd.query_devices()
+    usb_bulundu = False
+    
+    print("\n--- GİRİŞ CİHAZLARI (Mikrofonlar) ---")
+    for i, cihaz in enumerate(cihazlar):
+        if cihaz["max_input_channels"] > 0:
+            isaret = ""
+            if "usb" in cihaz["name"].lower() and not usb_bulundu:
+                isaret = "  <== USB MİKROFON (OTOMATİK SEÇİLDİ)"
+                _USB_MIC_INDEX = i
+                usb_bulundu = True
+            print("  [{}] {} ({}ch, {}Hz){}".format(
+                i, cihaz["name"], cihaz["max_input_channels"],
+                int(cihaz["default_samplerate"]), isaret
+            ))
+    
+    print("\n--- ÇIKIŞ CİHAZLARI (Hoparlörler) ---")
+    for i, cihaz in enumerate(cihazlar):
+        if cihaz["max_output_channels"] > 0:
+            print("  [{}] {} ({}ch, {}Hz)".format(
+                i, cihaz["name"], cihaz["max_output_channels"],
+                int(cihaz["default_samplerate"])
+            ))
+    
+    print("\n" + "-" * 60)
+    if _USB_MIC_INDEX is not None:
+        print("[TAMAM] USB Mikrofon bulundu: Index={}, Ad='{}'".format(
+            _USB_MIC_INDEX, cihazlar[_USB_MIC_INDEX]["name"]
+        ))
+    else:
+        varsayilan = sd.default.device[0]
+        print("[BILGI] USB mikrofon bulunamadi. Varsayilan giris cihazi kullanilacak (Index={})".format(
+            varsayilan
+        ))
+    print("-" * 60 + "\n")
+    
+    return _USB_MIC_INDEX
+
+
 def ses_oynatici_baslat():
     """Ses oynaticiyi hazirla."""
     try:
@@ -17,10 +68,29 @@ def ses_oynatici_baslat():
         print("[UYARI] pygame baslatilamadi, sounddevice ile devam edilecek: {}".format(e))
 
 def ses_dosyasi_cal(dosya_yolu):
-    """WAV dosyasini varsayilan cikis cihazindan cal."""
-    data, samplerate = sf.read(dosya_yolu, dtype="float32")
-    sd.play(data, samplerate)
-    sd.wait()
+       """Ses dosyasini dogrudan Raspberry Pi hoparlorune gonder."""
+       import os
+       if not os.path.exists(dosya_yolu) or os.path.getsize(dosya_yolu) == 0:
+           return
+
+       try:
+           data, samplerate = sf.read(dosya_yolu, dtype="float32")
+           
+           # Raspberry Pi'ye taktigin hoparlorun indeksi (Örn: device=1 veya device=2)
+           # Aplay listesindeki veya query_devices sonucundaki USB ses kartı indeksini buraya yaz
+           hedef_hoparlor_index = 1  # Gerekirse 2 yapabilirsin
+           
+           sd.play(data, samplerate=samplerate, device=hedef_hoparlor_index)
+           sd.wait()
+           print("[SES] Yanit Raspberry Pi hoparlorunden calindi.")
+       except Exception as e:
+           print(f"[HATA] Ses calinamadi: {e}")
+           try:
+               # Yedek olarak varsayılan ALSA çıkışını dene
+               sd.play(data, samplerate=samplerate)
+               sd.wait()
+           except:
+               pass
 
 def onay_sesi_olustur():
     """Uyandirma komutu algilandiginda calacak kisa bir bip sesi olustur."""
@@ -42,9 +112,9 @@ def bip_cal():
     sd.wait()
 
 def ses_kaydet(sure):
-    """Mikrofondan ses kaydi al."""
+    """Mikrofondan ses kaydi al. USB mikrofon varsa onu kullanir."""
     audio = sd.rec(int(sure * SAMPLE_RATE), samplerate=SAMPLE_RATE,
-                   channels=1, dtype="float32")
+                   channels=1, dtype="float32", device=_USB_MIC_INDEX)
     sd.wait()
     return audio
 

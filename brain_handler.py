@@ -8,14 +8,14 @@ def noktalama_temizle(metin):
 def wake_word_kontrol(metin):
     """Metinde uyandirma komutu var mi kontrol et."""
     metin_kucuk = noktalama_temizle(metin.lower().strip())
-    # "hey" (veya "he", "hei") + "gam" ile baslayan bir kelime
-    pattern = r'\b(hey|he|hei)\s+gam\w*'
+    # "hey asistan", "asistan", "hey", "merhaba", "selam" gibi komutlari algilar
+    pattern = r'\b(?:hey\s+asistan|hey|merhaba|selam|asistan)\b'
     return bool(re.search(pattern, metin_kucuk))
 
 def wake_word_sonrasi_metni_al(metin):
     """Uyandirma komutundan sonraki metni cikar (varsa)."""
     metin_kucuk = noktalama_temizle(metin.lower())
-    pattern = r'\b(hey|he|hei)\s+gam\w*'
+    pattern = r'\b(?:hey\s+asistan|hey|merhaba|selam|asistan)\b'
     match = re.search(pattern, metin_kucuk)
     if match:
         kalan = metin[match.end():].strip()

@@ -4,10 +4,47 @@ import threading
 import time
 import math
 
+
+def draw_scaled_text(surface, text, y_position, max_width=120, default_font_size=18):
+    """
+    Metni verilen yüzeye dinamik font ölçeklendirmesiyle ortalayarak çizer.
+    
+    Metin max_width piksel genişliğine sığmıyorsa, sığana kadar
+    font boyutunu 1'er 1'er küçültür. Minimum font boyutu 6px'tir.
+    
+    Args:
+        surface (pygame.Surface): Üzerine çizim yapılacak yüzey (OLED arabelleği).
+        text (str): Ekrana yazdırılacak metin (ör. '@kullanici_adi').
+        y_position (int): Metnin Y eksenindeki merkez konumu (piksel).
+        max_width (int): Metnin sığması gereken maksimum piksel genişliği. Varsayılan 120.
+        default_font_size (int): Başlangıç font boyutu. Varsayılan 18.
+    """
+    font_size = default_font_size
+    min_font_size = 6
+
+    # Font boyutunu metin sığana kadar küçült
+    while font_size >= min_font_size:
+        scaled_font = pygame.font.SysFont("Consolas", font_size, bold=True)
+        text_surface = scaled_font.render(text, True, (255, 255, 255))
+        text_width = text_surface.get_width()
+
+        if text_width <= max_width:
+            break
+        font_size -= 1
+    else:
+        # Min boyuta düşüldüyse son halini kullan
+        scaled_font = pygame.font.SysFont("Consolas", min_font_size, bold=True)
+        text_surface = scaled_font.render(text, True, (255, 255, 255))
+
+    # Metni X ekseninde ortalayarak yüzeye çiz
+    text_rect = text_surface.get_rect(center=(surface.get_width() // 2, y_position))
+    surface.blit(text_surface, text_rect)
+
+
 class GamboadEyes:
     def __init__(self, width=128, height=128):
         """
-        GumBot OLED Goz Simülatörü Sınıfı.
+        DÜ-ASİSTAN OLED Goz Simülatörü Sınıfı.
         
         Args:
             width (int): Her bir OLED ekranın genişliği (piksel). Varsayılan 128.
@@ -16,6 +53,7 @@ class GamboadEyes:
         self.width = width
         self.height = height
         self.emotion = "normal"
+        self.instagram_handle = ""
         self.is_talking = False
         self.running = False
         self.thread = None
@@ -47,18 +85,22 @@ class GamboadEyes:
             self.thread.join(timeout=2.0)
         print("[EYES] Göz simülasyonu durduruldu.")
 
-    def set_emotion(self, emotion):
+    def set_emotion(self, emotion, ig_handle=""):
         """
         Robotun duygu durumunu değiştirir.
         
         Args:
-            emotion (str): 'normal', 'happy', 'sad', 'angry', 'surprised', 'sleepy', 'heart'
+            emotion (str): 'normal', 'happy', 'sad', 'angry', 'surprised', 'sleepy', 'heart', 'instagram_logo'
+            ig_handle (str): Instagram kullanıcı adı (sadece instagram_logo durumunda geçerli)
         """
-        valid_emotions = ["normal", "happy", "sad", "angry", "surprised", "sleepy", "heart"]
+        valid_emotions = ["normal", "happy", "sad", "angry", "surprised", "sleepy", "heart", "instagram_logo"]
         if emotion in valid_emotions:
             with self.lock:
                 self.emotion = emotion
+                self.instagram_handle = ig_handle
             print(f"[EYES] Duygu durumu güncellendi: {emotion}")
+            if ig_handle:
+                print(f"[EYES] IG Hesabı: {ig_handle}")
         else:
             print(f"[EYES] [UYARI] Geçersiz duygu durumu: {emotion}")
 
@@ -92,7 +134,7 @@ class GamboadEyes:
     def _run_loop(self):
         """Pygame döngüsünü çalıştıran arka plan thread fonksiyonu."""
         pygame.init()
-        pygame.display.set_caption("GumBot OLED Eyes Simulator")
+        pygame.display.set_caption("DÜ-ASİSTAN OLED Eyes Simulator")
         
         # Simülasyon penceresi boyutları (600x350)
         win_w, win_h = 600, 350
@@ -114,6 +156,20 @@ class GamboadEyes:
         
         # Göz çizimi için geçici şeffaf arabellek
         eye_temp_surf = pygame.Surface((self.width, self.height))
+        
+        # Düzce Üniversitesi Logosunu Yükle (Varsa)
+        try:
+            import os
+            if os.path.exists("du_logo.png"):
+                raw_logo = pygame.image.load("du_logo.png")
+                # 100x40'a uygun şekilde boyutlandır
+                logo_w, logo_h = int(100 * self.scale_w), int(40 * self.scale_h)
+                self.du_logo = pygame.transform.scale(raw_logo, (logo_w, logo_h))
+            else:
+                self.du_logo = None
+        except Exception as e:
+            print(f"[EYES] Logo yükleme hatası: {e}")
+            self.du_logo = None
         
         while self.running:
             # Event işleme
@@ -221,22 +277,46 @@ class GamboadEyes:
             final_scale_x = talk_scale_x
             final_scale_y = talk_scale_y * (1.0 - blink_val)
             
-            if final_scale_y > 0.05:
-                # Göz açık veya yarı açık: Ölçeklendirip merkeze yerleştir
-                new_w = int(self.width * final_scale_x)
-                new_h = int(self.height * final_scale_y)
-                
-                # Boyut 0 olmasın diye min limit koyuyoruz
-                new_w = max(1, new_w)
-                new_h = max(1, new_h)
-                
-                scaled_eye = pygame.transform.scale(eye_temp_surf, (new_w, new_h))
-                rect = scaled_eye.get_rect(center=(self.width // 2, self.height // 2))
-                oled_buffer.blit(scaled_eye, rect)
+            if current_emotion != "instagram_logo":
+                if final_scale_y > 0.05:
+                    # Göz açık veya yarı açık: Ölçeklendirip merkeze yerleştir
+                    new_w = int(self.width * final_scale_x)
+                    new_h = int(self.height * final_scale_y)
+                    
+                    # Boyut 0 olmasın diye min limit koyuyoruz
+                    new_w = max(1, new_w)
+                    new_h = max(1, new_h)
+                    
+                    scaled_eye = pygame.transform.scale(eye_temp_surf, (new_w, new_h))
+                    rect = scaled_eye.get_rect(center=(self.width // 2, self.height // 2))
+                    oled_buffer.blit(scaled_eye, rect)
+                else:
+                    # Tamamen göz kırptığında ince beyaz bir yatay çizgi göster
+                    line_pts = self._scale_pts([(34, 64), (94, 64)])
+                    pygame.draw.line(oled_buffer, white, line_pts[0], line_pts[1], max(1, int(6 * self.scale_h)))
             else:
-                # Tamamen göz kırptığında ince beyaz bir yatay çizgi göster
-                line_pts = self._scale_pts([(34, 64), (94, 64)])
-                pygame.draw.line(oled_buffer, white, line_pts[0], line_pts[1], max(1, int(6 * self.scale_h)))
+                # Instagram Önerisi (State 8)
+                # Üst Bölüm (0 - 75 px): DÜ Logosu veya metin
+                if hasattr(self, 'du_logo') and self.du_logo:
+                    logo_rect = self.du_logo.get_rect(center=(self.width // 2, int(37 * self.scale_h)))
+                    oled_buffer.blit(self.du_logo, logo_rect)
+                else:
+                    ig_title = font.render("DUZCE UNI", True, white)
+                    oled_buffer.blit(ig_title, ig_title.get_rect(center=(self.width // 2, int(37 * self.scale_h))))
+                    
+                # Orta Bölüm (75 - 95 px): INSTAGRAM:
+                ig_label = font.render("INSTAGRAM:", True, white)
+                oled_buffer.blit(ig_label, ig_label.get_rect(center=(self.width // 2, int(85 * self.scale_h))))
+                
+                # Alt Bölüm (95 - 128 px): @kullanici_adi (Dinamik Font Ölçeklendirme)
+                if hasattr(self, 'instagram_handle') and self.instagram_handle:
+                    draw_scaled_text(
+                        oled_buffer,
+                        self.instagram_handle,
+                        y_position=int(111 * self.scale_h),
+                        max_width=int(120 * self.scale_w),
+                        default_font_size=18
+                    )
 
             # --- 6. PC Arayüzünü Çiz (Simülatör Görünümü) ---
             screen.fill((18, 18, 20)) # Koyu gri arka plan
@@ -258,7 +338,7 @@ class GamboadEyes:
             screen.blit(scaled_display, (320, 55))  # Sağ Göz Ekranı
             
             # Metin Etiketleri ve Bilgiler
-            title_text = title_font.render("GUMBOT OLED EYES SIMULATOR (SHARED CS)", True, (255, 255, 255))
+            title_text = title_font.render("DÜ-ASİSTAN OLED EYES SIMULATOR (SHARED CS)", True, (255, 255, 255))
             screen.blit(title_text, title_text.get_rect(center=(300, 35)))
             
             label_left = font.render("OLED LEFT (CS)", True, (150, 150, 150))
