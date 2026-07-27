@@ -68,23 +68,21 @@ def ses_oynatici_baslat():
         print("[UYARI] pygame baslatilamadi, sounddevice ile devam edilecek: {}".format(e))
 
 def ses_dosyasi_cal(dosya_yolu):
-    """Ses dosyasini dogrudan pygame mixer ile guvenli bir sekilde cal."""
+    """Ses dosyasini belirli bir hoparlor indeksine gondererek cal."""
     try:
         import os
         if not os.path.exists(dosya_yolu) or os.path.getsize(dosya_yolu) == 0:
             return
         
-        if not pygame.mixer.get_init():
-            pygame.mixer.init()
-            
-        pygame.mixer.music.load(dosya_yolu)
-        pygame.mixer.music.play()
-        while pygame.mixer.music.get_busy():
-            pygame.time.Clock().tick(10)
+        data, samplerate = sf.read(dosya_yolu, dtype="float32")
+        hedef_hoparlor_index = 5  # Speakers (Realtek)
+        
+        sd.play(data, samplerate=samplerate, device=hedef_hoparlor_index)
+        sd.wait()
         print("[SES] Yanit basariyla calindi.")
     except Exception as e:
         print(f"[HATA] Ses calinamadi: {e}")
-
+        
 def onay_sesi_olustur():
     """Uyandirma komutu algilandiginda calacak kisa bir bip sesi olustur."""
     sure = 0.15  # saniye
