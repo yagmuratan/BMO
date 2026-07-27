@@ -68,29 +68,22 @@ def ses_oynatici_baslat():
         print("[UYARI] pygame baslatilamadi, sounddevice ile devam edilecek: {}".format(e))
 
 def ses_dosyasi_cal(dosya_yolu):
-       """Ses dosyasini dogrudan Raspberry Pi hoparlorune gonder."""
-       import os
-       if not os.path.exists(dosya_yolu) or os.path.getsize(dosya_yolu) == 0:
-           return
-
-       try:
-           data, samplerate = sf.read(dosya_yolu, dtype="float32")
-           
-           # Raspberry Pi'ye taktigin hoparlorun indeksi (Örn: device=1 veya device=2)
-           # Aplay listesindeki veya query_devices sonucundaki USB ses kartı indeksini buraya yaz
-           hedef_hoparlor_index = 1  # Gerekirse 2 yapabilirsin
-           
-           sd.play(data, samplerate=samplerate, device=hedef_hoparlor_index)
-           sd.wait()
-           print("[SES] Yanit Raspberry Pi hoparlorunden calindi.")
-       except Exception as e:
-           print(f"[HATA] Ses calinamadi: {e}")
-           try:
-               # Yedek olarak varsayılan ALSA çıkışını dene
-               sd.play(data, samplerate=samplerate)
-               sd.wait()
-           except:
-               pass
+    """Ses dosyasini dogrudan pygame mixer ile guvenli bir sekilde cal."""
+    try:
+        import os
+        if not os.path.exists(dosya_yolu) or os.path.getsize(dosya_yolu) == 0:
+            return
+        
+        if not pygame.mixer.get_init():
+            pygame.mixer.init()
+            
+        pygame.mixer.music.load(dosya_yolu)
+        pygame.mixer.music.play()
+        while pygame.mixer.music.get_busy():
+            pygame.time.Clock().tick(10)
+        print("[SES] Yanit basariyla calindi.")
+    except Exception as e:
+        print(f"[HATA] Ses calinamadi: {e}")
 
 def onay_sesi_olustur():
     """Uyandirma komutu algilandiginda calacak kisa bir bip sesi olustur."""
